@@ -12,10 +12,15 @@ fn main() {
     }
     let target = &args[1];
 
-    // TODO: Milestone 1: Get the target Process using psutils::get_target()
     let tar_process = ps_utils::get_target(target).expect("Error getting target process");
     match tar_process {
-        Some(process) => process.print(),
+        Some(process) => {
+            process.print();
+            let childs = ps_utils::get_child_processes(process.pid).expect("No child process");
+            for i in childs {
+                i.print();
+            }
+        }
         None => {
             println!("No matching process found");
             std::process::exit(1);

@@ -14,6 +14,7 @@ impl Process {
     }
 
     pub fn print(&self) {
+        println!("========== \"{}\" (pid {}, ppid {}) ==========",self.command, self.pid, self.ppid);
         match self.list_open_files() {
             None => println!(
                 "Warning: could not inspect file descriptors for this process! \
