@@ -15,7 +15,7 @@ fn main() {
     // TODO: Milestone 1: Get the target Process using psutils::get_target()
     let tar_process = ps_utils::get_target(target).expect("Error getting target process");
     match tar_process {
-        Some(process) => println!("Found pid {}", process.pid),
+        Some(process) => process.print(),
         None => {
             println!("No matching process found");
             std::process::exit(1);
