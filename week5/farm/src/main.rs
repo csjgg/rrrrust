@@ -1,7 +1,7 @@
-use std::collections::VecDeque;
 #[allow(unused_imports)]
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use std::collections::VecDeque;
 #[allow(unused_imports)]
 use std::{env, process, thread};
 
@@ -66,17 +66,35 @@ fn get_input_numbers() -> VecDeque<u32> {
     numbers
 }
 
+fn get_fornt_number(mutex: &Mutex<VecDeque<u32>>) -> Option<u32> {
+    let mut numbers = mutex.lock().unwrap();
+    numbers.pop_front()
+}
+
 fn main() {
     let num_threads = num_cpus::get();
     println!("Farm starting on {} CPUs", num_threads);
     let start = Instant::now();
 
     // TODO: call get_input_numbers() and store a queue of numbers to factor
+    let numbers = Arc::new(Mutex::new(get_input_numbers()));
 
     // TODO: spawn `num_threads` threads, each of which pops numbers off the queue and calls
     // factor_number() until the queue is empty
-
+    let mut handlers = Vec::new();
+    for _ in 0..num_threads {
+        let numbers_clone = Arc::clone(&numbers);
+        let handler = thread::spawn(move || {
+            while let Some(num) = get_fornt_number(&numbers_clone) {
+                factor_number(num);
+            }
+        });
+        handlers.push(handler);
+    }
     // TODO: join all the threads you created
+    for handler in handlers {
+        handler.join().unwrap();
+    }
 
     println!("Total execution time: {:?}", start.elapsed());
 }
