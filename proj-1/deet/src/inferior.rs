@@ -5,6 +5,8 @@ use nix::unistd::Pid;
 use std::os::unix::process::CommandExt;
 use std::process::Child;
 use std::process::Command;
+use crate::dwarf_data::{DwarfData, Error as DwarfError};
+
 
 pub enum Status {
     /// Indicates inferior stopped. Contains the signal that stopped the process, as well as the
@@ -85,8 +87,10 @@ impl Inferior {
             other => panic!("waitpid returned unexpected status: {:?}", other),
         })
     }
-    pub fn print_backtrace(&self) -> Result<(), nix::Error>{
-        println!("hello");
+    pub fn print_backtrace(&self,debug_data: &DwarfData) -> Result<(), nix::Error>{
+        let regs = ptrace::getregs(self.pid())?;
+        println!("%rip register: {:#x}", regs.rip);
+        
         Ok(())
     }
 }
