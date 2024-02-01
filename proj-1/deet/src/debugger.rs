@@ -73,6 +73,12 @@ impl Debugger {
                 }
                 DebuggerCommand::Contin => self.contin(),
                 DebuggerCommand::Quit => {
+                    match self.inferior {
+                        Some(ref mut inf) => {
+                            inf.kill();
+                        }
+                        None => {}
+                    }
                     return;
                 }
             }
