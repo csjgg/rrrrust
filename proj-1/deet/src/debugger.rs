@@ -29,7 +29,14 @@ impl Debugger {
         }
     }
 
-    fn contin(inf: &Inferior) {
+    fn contin(&mut self) {
+        let inf = match &mut self.inferior {
+            Some(inf) => inf,
+            None => {
+                println!("No child process now");
+                return;
+            }
+        };
         let re = inf.cont().expect("Error continuing inferior");
         match re {
             Stopped(signal, _) => {
@@ -37,9 +44,11 @@ impl Debugger {
             }
             Exited(code) => {
                 println!("Child exited (status {})", code);
+                self.inferior = None;
             }
             Signaled(signal) => {
                 println!("Child exited (signal {})", signal);
+                self.inferior = None;
             }
         }
     }
@@ -50,24 +59,19 @@ impl Debugger {
                 DebuggerCommand::Run(args) => {
                     if let Some(inferior) = Inferior::new(&self.target, &args) {
                         // Create the inferior
+                        match &mut self.inferior {
+                            Some(inf) => {
+                                inf.kill();
+                            }
+                            None => {}
+                        }
                         self.inferior = Some(inferior);
-                        // TODO (milestone 1): make the inferior run
-                        // You may use self.inferior.as_mut().unwrap() to get a mutable reference
-                        // to the Inferior object
-                        let inf = self.inferior.as_mut().unwrap();
-                        Self::contin(inf);
+                        self.contin();
                     } else {
                         println!("Error starting subprocess");
                     }
                 }
-                DebuggerCommand::Contin => match &self.inferior {
-                    Some(inf) => {
-                        Self::contin(inf);
-                    }
-                    None => {
-                        println!("No child process");
-                    }
-                },
+                DebuggerCommand::Contin => self.contin(),
                 DebuggerCommand::Quit => {
                     return;
                 }
