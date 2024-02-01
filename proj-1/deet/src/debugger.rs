@@ -72,6 +72,16 @@ impl Debugger {
                     }
                 }
                 DebuggerCommand::Contin => self.contin(),
+                DebuggerCommand::Backtrace => {
+                    match &self.inferior {
+                        Some(inf) => {
+                            let _ = inf.print_backtrace();
+                        }
+                        None => {
+                            println!("No child process now");
+                        }
+                    }
+                }
                 DebuggerCommand::Quit => {
                     match self.inferior {
                         Some(ref mut inf) => {

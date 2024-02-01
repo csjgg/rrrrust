@@ -85,4 +85,8 @@ impl Inferior {
             other => panic!("waitpid returned unexpected status: {:?}", other),
         })
     }
+    pub fn print_backtrace(&self) -> Result<(), nix::Error>{
+        println!("hello");
+        Ok(())
+    }
 }
