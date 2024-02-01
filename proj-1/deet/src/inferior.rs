@@ -60,6 +60,12 @@ impl Inferior {
         nix::unistd::Pid::from_raw(self.child.id() as i32)
     }
 
+    /// Make process continue
+    pub fn cont(&self) -> Result<(), nix::Error> {
+        ptrace::cont(self.pid(), None)?;
+        Ok(())
+    }
+    
     /// Calls waitpid on this inferior and returns a Status to indicate the state of the process
     /// after the waitpid call.
     pub fn wait(&self, options: Option<WaitPidFlag>) -> Result<Status, nix::Error> {
