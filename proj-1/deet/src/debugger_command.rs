@@ -2,6 +2,7 @@ pub enum DebuggerCommand {
     Quit,
     Run(Vec<String>),
     Contin,
+    Backtrace,
 }
 
 impl DebuggerCommand {
@@ -15,6 +16,7 @@ impl DebuggerCommand {
                 ))
             }
             "c" | "continue" => Some(DebuggerCommand::Contin),
+            "bt" | "backtrace" | "back" => Some(DebuggerCommand::Backtrace),
             // Default case:
             _ => None,
         }
