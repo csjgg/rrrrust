@@ -55,6 +55,11 @@ impl Inferior {
         }
     }
 
+    /// Kill the inferior process.
+    pub fn kill(&mut self) {
+        self.child.kill().expect("Error killing inferior");
+    }
+
     /// Returns the pid of this inferior.
     pub fn pid(&self) -> Pid {
         nix::unistd::Pid::from_raw(self.child.id() as i32)
