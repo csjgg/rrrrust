@@ -2,7 +2,6 @@ use nix::sys::ptrace;
 use nix::sys::signal;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::Pid;
-use std::convert::TryInto;
 use std::os::unix::process::CommandExt;
 use std::process::Child;
 use std::process::Command;
@@ -91,21 +90,30 @@ impl Inferior {
     pub fn print_backtrace(&self,debug_data: &DwarfData) -> Result<(), nix::Error>{
         let regs = ptrace::getregs(self.pid())?;
         println!("%rip register: {:#x}", regs.rip);
-        let line = match debug_data.get_line_from_addr(regs.rip.try_into().unwrap()){
-            Some(line) => line,
-            None => {
-                println!("No line information found");
-                return Ok(());
+        let mut base_ptr = regs.rbp as usize;
+        let mut instruction_ptr = regs.rip as usize;
+        loop{
+            let line = match debug_data.get_line_from_addr(instruction_ptr){
+                Some(line) => line,
+                None => {
+                    println!("No line information found");
+                    return Ok(());
+                }
+            };
+            let func = match debug_data.get_function_from_addr(instruction_ptr){
+                Some(func) => func,
+                None => {
+                    println!("No function information found");
+                    return Ok(());
+                }
+            };
+            println!("{} ({}:{})",func,line.file,line.number);
+            if func == "main"{
+                break;
             }
-        };
-        let func = match debug_data.get_function_from_addr(regs.rip.try_into().unwrap()){
-            Some(func) => func,
-            None => {
-                println!("No function information found");
-                return Ok(());
-            }
-        };
-        println!("{} ({}:{})",func,line.file,line.number);
+            instruction_ptr = ptrace::read(self.pid(),(base_ptr+8) as ptrace::AddressType)? as usize;
+            base_ptr = ptrace::read(self.pid(),base_ptr as ptrace::AddressType)? as usize;
+        }
         Ok(())
     }
 }
