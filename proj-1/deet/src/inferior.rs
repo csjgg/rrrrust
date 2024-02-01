@@ -61,9 +61,9 @@ impl Inferior {
     }
 
     /// Make process continue
-    pub fn cont(&self) -> Result<(), nix::Error> {
+    pub fn cont(&self) -> Result<Status, nix::Error> {
         ptrace::cont(self.pid(), None)?;
-        Ok(())
+        self.wait(None)
     }
     
     /// Calls waitpid on this inferior and returns a Status to indicate the state of the process
