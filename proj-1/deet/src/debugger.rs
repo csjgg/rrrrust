@@ -52,8 +52,17 @@ impl Debugger {
         };
         let re = inf.cont().expect("Error continuing inferior");
         match re {
-            Stopped(signal, _) => {
+            Stopped(signal, reg) => {
                 println!("Child stopped (signal {})", signal);
+                let func = match self.debug_data.get_function_from_addr(reg){
+                    Some(func) => func,
+                    None => return
+                };
+                let line = match self.debug_data.get_line_from_addr(reg){
+                    Some(line) => line,
+                    None => return
+                };
+                println!("Stop at {} ({}:{})",func,line.file,line.number);
             }
             Exited(code) => {
                 println!("Child exited (status {})", code);
