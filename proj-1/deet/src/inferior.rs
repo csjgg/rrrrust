@@ -45,16 +45,13 @@ impl Inferior {
         let inferior = Inferior { child };
         let result = inferior.wait(None).ok()?;
         match result {
-            Status::Signaled(signal) => {
-                if signal == signal::SIGTRAP {
-                    Some(inferior)
-                }else{
-                    None
+            Status::Stopped(signal, _) => {
+                match signal {
+                    signal::SIGTRAP => Some(inferior),
+                    _ => None,
                 }
             }
-            _=> {
-                None
-            }
+            _ => None,
         }
     }
 
