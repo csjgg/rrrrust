@@ -58,6 +58,7 @@ impl Inferior {
     /// Kill the inferior process.
     pub fn kill(&mut self) {
         self.child.kill().expect("Error killing inferior");
+        self.child.wait().expect("Error waiting for inferior");
     }
 
     /// Returns the pid of this inferior.
