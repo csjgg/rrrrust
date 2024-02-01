@@ -1,7 +1,7 @@
 pub enum DebuggerCommand {
     Quit,
     Run(Vec<String>),
-    Contin
+    Contin,
 }
 
 impl DebuggerCommand {

@@ -1,8 +1,8 @@
-use crate::{debugger_command::DebuggerCommand, inferior::Status};
 use crate::inferior::Inferior;
+use crate::{debugger_command::DebuggerCommand, inferior::Status};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
-use Status::{Stopped, Exited, Signaled};
+use Status::{Exited, Signaled, Stopped};
 
 pub struct Debugger {
     target: String,
@@ -29,6 +29,21 @@ impl Debugger {
         }
     }
 
+    fn contin(inf: &Inferior) {
+        let re = inf.cont().expect("Error continuing inferior");
+        match re {
+            Stopped(signal, _) => {
+                println!("Child stopped (signal {})", signal);
+            }
+            Exited(code) => {
+                println!("Child exited (status {})", code);
+            }
+            Signaled(signal) => {
+                println!("Child exited (signal {})", signal);
+            }
+        }
+    }
+
     pub fn run(&mut self) {
         loop {
             match self.get_next_command() {
@@ -40,22 +55,19 @@ impl Debugger {
                         // You may use self.inferior.as_mut().unwrap() to get a mutable reference
                         // to the Inferior object
                         let inf = self.inferior.as_mut().unwrap();
-                        let re = inf.cont().expect("Error continuing inferior");
-                        match re{
-                            Stopped(signal, _) => {
-                                println!("Child stopped (signal {})", signal);
-                            }
-                            Exited(code) => {
-                                println!("Child exited (status {})", code);
-                            }
-                            Signaled(signal) => {
-                                println!("Child exited (signal {})", signal);
-                            }
-                        }
+                        Self::contin(inf);
                     } else {
                         println!("Error starting subprocess");
                     }
                 }
+                DebuggerCommand::Contin => match &self.inferior {
+                    Some(inf) => {
+                        Self::contin(inf);
+                    }
+                    None => {
+                        println!("No child process");
+                    }
+                },
                 DebuggerCommand::Quit => {
                     return;
                 }
