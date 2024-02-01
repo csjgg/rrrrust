@@ -2,10 +2,11 @@ use nix::sys::ptrace;
 use nix::sys::signal;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::Pid;
+use std::convert::TryInto;
 use std::os::unix::process::CommandExt;
 use std::process::Child;
 use std::process::Command;
-use crate::dwarf_data::{DwarfData, Error as DwarfError};
+use crate::dwarf_data::DwarfData;
 
 
 pub enum Status {
@@ -90,7 +91,21 @@ impl Inferior {
     pub fn print_backtrace(&self,debug_data: &DwarfData) -> Result<(), nix::Error>{
         let regs = ptrace::getregs(self.pid())?;
         println!("%rip register: {:#x}", regs.rip);
-        
+        let line = match debug_data.get_line_from_addr(regs.rip.try_into().unwrap()){
+            Some(line) => line,
+            None => {
+                println!("No line information found");
+                return Ok(());
+            }
+        };
+        let func = match debug_data.get_function_from_addr(regs.rip.try_into().unwrap()){
+            Some(func) => func,
+            None => {
+                println!("No function information found");
+                return Ok(());
+            }
+        };
+        println!("{} ({}:{})",func,line.file,line.number);
         Ok(())
     }
 }
