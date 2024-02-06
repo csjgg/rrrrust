@@ -1,9 +1,9 @@
+use crate::dwarf_data::{DwarfData, Error as DwarfError};
 use crate::inferior::Inferior;
 use crate::{debugger_command::DebuggerCommand, inferior::Status};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 use Status::{Exited, Signaled, Stopped};
-use crate::dwarf_data::{DwarfData, Error as DwarfError};
 
 pub struct Debugger {
     target: String,
@@ -11,7 +11,7 @@ pub struct Debugger {
     readline: Editor<()>,
     inferior: Option<Inferior>,
     debug_data: DwarfData,
-    break_point: Vec<usize>
+    break_point: Vec<usize>,
 }
 
 impl Debugger {
@@ -33,14 +33,13 @@ impl Debugger {
         // Attempt to load history from ~/.deet_history if it exists
         let _ = readline.load_history(&history_path);
         debug_data.print();
-
         Debugger {
             target: target.to_string(),
             history_path,
             readline,
             inferior: None,
             debug_data,
-            break_point: Vec::new()
+            break_point: Vec::new(),
         }
     }
 
@@ -56,15 +55,15 @@ impl Debugger {
         match re {
             Stopped(signal, reg) => {
                 println!("Child stopped (signal {})", signal);
-                let func = match self.debug_data.get_function_from_addr(reg){
+                let func = match self.debug_data.get_function_from_addr(reg) {
                     Some(func) => func,
-                    None => return
+                    None => return,
                 };
-                let line = match self.debug_data.get_line_from_addr(reg){
+                let line = match self.debug_data.get_line_from_addr(reg) {
                     Some(line) => line,
-                    None => return
+                    None => return,
                 };
-                println!("Stop at {} ({}:{})",func,line.file,line.number);
+                println!("Stop at {} ({}:{})", func, line.file, line.number);
             }
             Exited(code) => {
                 println!("Child exited (status {})", code);
@@ -76,7 +75,7 @@ impl Debugger {
             }
         }
     }
-    
+
     fn parse_address(addr: &str) -> Option<usize> {
         let addr_without_0x = if addr.to_lowercase().starts_with("0x") {
             &addr[2..]
@@ -84,6 +83,18 @@ impl Debugger {
             &addr
         };
         usize::from_str_radix(addr_without_0x, 16).ok()
+    }
+
+    fn insert_bp(&mut self, addr:usize) {
+        self.break_point.push(addr);
+        println!("Breakpoint at 0x{:x}", addr);
+        let inf = match &mut self.inferior {
+            Some(inf) => inf,
+            None => {
+                return;
+            }
+        };
+        let _ = inf.insert_breakpoint(addr);
     }
 
     pub fn run(&mut self) {
@@ -105,16 +116,14 @@ impl Debugger {
                     }
                 }
                 DebuggerCommand::Contin => self.contin(),
-                DebuggerCommand::Backtrace => {
-                    match &self.inferior {
-                        Some(inf) => {
-                            let _ = inf.print_backtrace(&self.debug_data);
-                        }
-                        None => {
-                            println!("No child process now");
-                        }
+                DebuggerCommand::Backtrace => match &self.inferior {
+                    Some(inf) => {
+                        let _ = inf.print_backtrace(&self.debug_data);
                     }
-                }
+                    None => {
+                        println!("No child process now");
+                    }
+                },
                 DebuggerCommand::Quit => {
                     match self.inferior {
                         Some(ref mut inf) => {
@@ -125,25 +134,30 @@ impl Debugger {
                     return;
                 }
                 DebuggerCommand::Breakpoint(breakpoint) => {
-                    if breakpoint.starts_with('*'){
-                        let addr = Debugger::parse_address(&breakpoint[1..]);
-                        match addr {
-                            Some(addr) => {
-                                self.break_point.push(addr);
-                                println!("Breakpoint at 0x{:x}", addr);
-                                let inf = match &mut self.inferior{
-                                    Some(inf) => inf,
-                                    None => {
-                                        continue;
-                                    }
-                                };
-                                let _ = inf.insert_breakpoint(addr);
+                    let addr;
+                    if breakpoint.starts_with('*') {
+                        addr = Debugger::parse_address(&breakpoint[1..]);
+                    }else {
+                        let linenum:usize;
+                        match breakpoint.parse::<usize>(){
+                            Ok(num)=> {
+                                linenum = num;
+                                addr = self.debug_data.get_addr_for_line(None,linenum);
+
                             }
-                            None => {
-                                println!("Invalid address");
+                            Err(_)=>{
+                                addr = self.debug_data.get_addr_for_function(None,&breakpoint);
                             }
                         }
                     }
+                    match addr {
+                        Some(addr) => {
+                            self.insert_bp(addr);
+                        }
+                        None => {
+                            println!("Breakpoint on Invalid address");
+                        }
+                    }   
                 }
             }
         }
