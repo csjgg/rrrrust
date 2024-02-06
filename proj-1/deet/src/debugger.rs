@@ -131,13 +131,18 @@ impl Debugger {
                             Some(addr) => {
                                 self.break_point.push(addr);
                                 println!("Breakpoint at 0x{:x}", addr);
+                                let inf = match &mut self.inferior{
+                                    Some(inf) => inf,
+                                    None => {
+                                        continue;
+                                    }
+                                };
+                                let _ = inf.insert_breakpoint(addr);
                             }
                             None => {
                                 println!("Invalid address");
                             }
                         }
-                    }else{
-                        return;
                     }
                 }
             }
