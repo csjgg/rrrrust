@@ -17,7 +17,6 @@ pub struct Debugger {
 impl Debugger {
     /// Initializes the debugger.
     pub fn new(target: &str) -> Debugger {
-        // TODO (milestone 3): initialize the DwarfData
         let debug_data = match DwarfData::from_file(target) {
             Ok(val) => val,
             Err(DwarfError::ErrorOpeningFile) => {
@@ -33,6 +32,7 @@ impl Debugger {
         let mut readline = Editor::<()>::new();
         // Attempt to load history from ~/.deet_history if it exists
         let _ = readline.load_history(&history_path);
+        debug_data.print();
 
         Debugger {
             target: target.to_string(),
@@ -90,7 +90,7 @@ impl Debugger {
         loop {
             match self.get_next_command() {
                 DebuggerCommand::Run(args) => {
-                    if let Some(inferior) = Inferior::new(&self.target, &args) {
+                    if let Some(inferior) = Inferior::new(&self.target, &args, &self.break_point) {
                         // Create the inferior
                         match &mut self.inferior {
                             Some(inf) => {
