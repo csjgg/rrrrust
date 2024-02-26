@@ -2,9 +2,9 @@ mod request;
 mod response;
 
 use clap::Parser;
+use std::sync::Arc;
 use rand::{Rng, SeedableRng};
 use tokio::net::{TcpListener, TcpStream};
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Contains information parsed from the command-line invocation of balancebeam. The Clap macros
@@ -44,7 +44,7 @@ struct ProxyState {
     #[allow(dead_code)]
     max_requests_per_minute: usize,
     /// Addresses of servers that we are proxying to
-    upstream_addresses: RwLock<Vec<String>>,
+    upstream_addresses: RwLock<Vec<(String, bool)>>,
 }
 
 #[tokio::main]
@@ -76,7 +76,7 @@ async fn main() {
 
     // Handle incoming connections
     let state = ProxyState {
-        upstream_addresses: RwLock::new(options.upstream),
+        upstream_addresses: RwLock::new(options.upstream.into_iter().map(|x| (x, true)).collect()),
         active_health_check_interval: options.active_health_check_interval,
         active_health_check_path: options.active_health_check_path,
         max_requests_per_minute: options.max_requests_per_minute,
@@ -90,13 +90,55 @@ async fn main() {
 }
 
 async fn connect_to_upstream(state: &ProxyState) -> Result<TcpStream, std::io::Error> {
-    let mut rng = rand::rngs::StdRng::from_entropy();
-    let upstream_idx = rng.gen_range(0..state.upstream_addresses.len());
-    let upstream_ip = &state.upstream_addresses[upstream_idx];
-    TcpStream::connect(upstream_ip).await.or_else(|err| {
-        log::error!("Failed to connect to upstream {}: {}", upstream_ip, err);
-        Err(err)
-    })
+    let mut stream: Result<TcpStream, std::io::Error> = Err(std::io::Error::new(std::io::ErrorKind::Other, "All upstream servers are down"));
+    let mut gotip: bool = false;
+    let mut unvalidip: Vec<String> = Vec::new();
+    let mut validip: Vec<String> = Vec::new();
+    {
+        let upstream = state.upstream_addresses.read().await;
+        let mut rng = rand::rngs::StdRng::from_entropy();
+        let mut ips = upstream.iter().filter(|&&(_, is_true)| is_true).collect::<Vec<_>>();
+        loop{
+            if ips.len() == 0{
+                break;
+            }
+            let index = rng.gen_range(0..ips.len());
+            let newstream = TcpStream::connect(&ips[index].0).await;
+            if newstream.is_ok(){
+                stream = newstream;
+                gotip = true;
+                break;
+            }
+            unvalidip.push(ips[index].0.to_string());
+            ips.remove(index);
+        }
+        if !gotip{
+            for (ip, _is_true) in upstream.iter().filter(|&&(_, is_true)| !is_true) {
+                let newstream = TcpStream::connect(ip).await;
+                if newstream.is_ok() {
+                    stream = newstream;
+                    gotip = true;
+                    validip.push(ip.to_string());
+                    break;
+                }
+            }
+        }
+    }
+    if !unvalidip.is_empty() || !validip.is_empty(){
+        let mut upstream = state.upstream_addresses.write().await;
+        for item in &mut *upstream {
+            if unvalidip.contains(&item.0) {
+                item.1 = false;
+            }
+            if validip.contains(&item.0) {
+                item.1 = true;
+            }
+        }
+    } 
+    if !gotip{
+        log::error!("Failed to connect to upstream : No valid ip");
+    }
+    stream
 }
 
 async fn send_response(client_conn: &mut TcpStream, response: &http::Response<Vec<u8>>) {
