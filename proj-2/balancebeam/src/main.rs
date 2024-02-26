@@ -3,9 +3,12 @@ mod response;
 
 use clap::Parser;
 use rand::{Rng, SeedableRng};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 /// Contains information parsed from the command-line invocation of balancebeam. The Clap macros
 /// provide a fancy way to automatically construct a command-line argument parser.
@@ -86,11 +89,31 @@ async fn main() {
     tokio::spawn(async move{
         active_check_intime(&state_check).await;
     });
+    let hashmap: Arc<RwLock<HashMap<String, Arc<Mutex<usize>>>>> = Arc::new(RwLock::new(HashMap::new()));
+
+    let hashmap_clone = Arc::clone(&hashmap);
+    tokio::spawn(async move{
+        intimeclear(&hashmap_clone).await;
+    });
 
     while let Ok((stream, _)) = listener.accept().await {
         // Handle the connection!
         let state_clone = Arc::clone(&state);
-        tokio::spawn(async move{ handle_connection(stream, &state_clone).await });
+        let client_ip = stream.peer_addr().unwrap().ip().to_string();
+        let mut need_write = false;
+        {
+            let hashmap = hashmap.read().await;
+            if !hashmap.contains_key(&client_ip) {
+                need_write = true;
+            }
+        }
+        if need_write {
+            let mut hashmap = hashmap.write().await;
+            hashmap.insert(client_ip.clone(), Arc::new(Mutex::new(0)));
+        }
+        let hashmap = hashmap.read().await;
+        let limit = Arc::clone(hashmap.get(&client_ip).unwrap());
+        tokio::spawn(async move{ handle_connection(stream, &state_clone, &limit).await });
     }
 }
 
@@ -230,7 +253,22 @@ async fn send_response(client_conn: &mut TcpStream, response: &http::Response<Ve
     }
 }
 
-async fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
+// Set 0 for rate limiting
+async fn intimeclear(limits:&RwLock<HashMap<String, Arc<Mutex<usize>>>> ){
+    let interval = Duration::from_secs(60);
+    loop{
+        tokio::time::sleep(interval).await;
+        {
+            let hash = limits.write().await;
+            for (_ip, limit) in hash.iter(){
+                let mut li = limit.lock().await;
+                *li = 0;
+            }
+        }
+    }
+}
+
+async fn handle_connection(mut client_conn: TcpStream, state: &ProxyState,limit: &Mutex<usize>) {
     let client_ip = client_conn.peer_addr().unwrap().ip().to_string();
     log::info!("Connection received from {}", client_ip);
 
@@ -244,7 +282,7 @@ async fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
         }
     };
     let upstream_ip = upstream_conn.peer_addr().unwrap().ip().to_string();
-
+    
     // The client may now send us one or more requests. Keep trying to read requests until the
     // client hangs up or we get an error.
     loop {
@@ -275,6 +313,18 @@ async fn handle_connection(mut client_conn: TcpStream, state: &ProxyState) {
                 continue;
             }
         };
+
+        // Add limit 
+        if state.max_requests_per_minute!=0{
+            let mut li = limit.lock().await;
+            *li += 1;
+            if *li > state.max_requests_per_minute{
+                let response = response::make_http_error(http::StatusCode::TOO_MANY_REQUESTS);
+                send_response(&mut client_conn, &response).await;
+                return;
+            }
+        }
+
         log::info!(
             "{} -> {}: {}",
             client_ip,
